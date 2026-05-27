@@ -110,7 +110,7 @@
             </button>
         </div>
     </div>
-    <div class="footer">Timing • iOS / iPad Optimized</div>
+    <div class="footer">Timing • Audio Loop Bug Fixed</div>
 </div>
 
 <script>
@@ -124,11 +124,14 @@
     let audio = null;
     const alarmFile = "alarm.mp3";
 
-    // Pre-load audio for better iOS compatibility
     function initAudio() {
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
         audio = new Audio(alarmFile);
         audio.preload = "auto";
-        audio.volume = 0.8;
+        audio.loop = false;           // ← Important: Prevent infinite loop
     }
 
     function loadSettings() {
@@ -156,22 +159,14 @@
     function playAlarm() {
         const settings = JSON.parse(localStorage.getItem('timingSettings') || '{}');
         
-        if (!audio) initAudio();
-        
+        initAudio();                    // Always reset audio
         audio.volume = settings.volume || 0.8;
         
-        // iOS requires user gesture + sometimes needs to be "unlocked"
-        audio.play().then(() => {
-            console.log("Audio played successfully");
-        }).catch(err => {
-            console.log("Audio play failed, retrying...", err);
-            // Retry once
-            setTimeout(() => {
-                audio.play().catch(e => console.log("Retry failed", e));
-            }, 300);
+        audio.play().catch(err => {
+            console.log("Audio play failed:", err);
         });
 
-        // Continue to next cycle
+        // Handle repeat logic
         if (currentRepeat < totalRepeats) {
             currentRepeat++;
             endTime = endTime + (settings.timeLength || 60) * 1000;
@@ -181,10 +176,9 @@
             isPaused = false;
             document.getElementById('start-btn').textContent = 'START TIMER';
             document.getElementById('start-btn').style.background = '#00d4ff';
+            endTime = null;
         }
     }
-
-    // ... (rest of the code remains the same as previous version)
 
     function toggleTimer() {
         const settings = JSON.parse(localStorage.getItem('timingSettings') || '{}');
@@ -218,6 +212,7 @@
 
     function stopTimer() {
         clearInterval(timerInterval);
+        if (audio) audio.pause();
         isRunning = false;
         isPaused = false;
         endTime = null;
@@ -248,11 +243,9 @@
         document.getElementById('timer-display').textContent = `${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
     }
 
-    // Initialize
     document.addEventListener('DOMContentLoaded', () => {
         loadSettings();
         updateDisplay();
-        initAudio();                    // Pre-load for iOS
 
         document.getElementById('start-btn').addEventListener('click', toggleTimer);
         document.getElementById('stop-btn').addEventListener('click', stopTimer);
