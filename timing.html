@@ -110,7 +110,7 @@
             </button>
         </div>
     </div>
-    <div class="footer">Timing • Audio Loop Bug Fixed</div>
+    <div class="footer">Timing • Audio Loop Fixed</div>
 </div>
 
 <script>
@@ -121,57 +121,36 @@
     let pausedRemaining = null;
     let totalRepeats = 3;
     let currentRepeat = 1;
-    let audio = null;
+    let currentAudio = null;        // ← Use single audio instance
     const alarmFile = "alarm.mp3";
 
-    function initAudio() {
-        if (audio) {
-            audio.pause();
-            audio.currentTime = 0;
+    function stopCurrentAudio() {
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
         }
-        audio = new Audio(alarmFile);
-        audio.preload = "auto";
-        audio.loop = false;           // ← Important: Prevent infinite loop
-    }
-
-    function loadSettings() {
-        const saved = JSON.parse(localStorage.getItem('timingSettings') || '{}');
-        document.getElementById('time-length').value = saved.timeLength || 60;
-        document.getElementById('repeats').value = saved.repeats || 3;
-        document.getElementById('volume-slider').value = saved.volume || 0.8;
-        document.getElementById('volume-value').textContent = Math.round((saved.volume || 0.8) * 100) + '%';
-    }
-
-    function saveSettings() {
-        const settings = {
-            timeLength: parseInt(document.getElementById('time-length').value) || 60,
-            repeats: parseInt(document.getElementById('repeats').value) || 1,
-            volume: parseFloat(document.getElementById('volume-slider').value)
-        };
-        localStorage.setItem('timingSettings', JSON.stringify(settings));
-        
-        const btn = document.getElementById('save-btn');
-        btn.textContent = '✅ 已儲存';
-        btn.style.background = '#22c55e';
-        setTimeout(() => { btn.textContent = '💾 儲存設定'; btn.style.background = '#00d4ff'; }, 1200);
     }
 
     function playAlarm() {
         const settings = JSON.parse(localStorage.getItem('timingSettings') || '{}');
         
-        initAudio();                    // Always reset audio
-        audio.volume = settings.volume || 0.8;
+        stopCurrentAudio();                     // Stop any previous audio
         
-        audio.play().catch(err => {
-            console.log("Audio play failed:", err);
+        currentAudio = new Audio(alarmFile);
+        currentAudio.volume = settings.volume || 0.8;
+        currentAudio.loop = false;
+
+        currentAudio.play().catch(err => {
+            console.log("Audio play error:", err);
         });
 
-        // Handle repeat logic
+        // Handle repeat
         if (currentRepeat < totalRepeats) {
             currentRepeat++;
             endTime = endTime + (settings.timeLength || 60) * 1000;
             startCountdown();
         } else {
+            // All repeats finished
             isRunning = false;
             isPaused = false;
             document.getElementById('start-btn').textContent = 'START TIMER';
@@ -212,7 +191,7 @@
 
     function stopTimer() {
         clearInterval(timerInterval);
-        if (audio) audio.pause();
+        stopCurrentAudio();
         isRunning = false;
         isPaused = false;
         endTime = null;
@@ -243,6 +222,7 @@
         document.getElementById('timer-display').textContent = `${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
     }
 
+    // Load & Init
     document.addEventListener('DOMContentLoaded', () => {
         loadSettings();
         updateDisplay();
@@ -256,6 +236,28 @@
             document.getElementById('volume-value').textContent = Math.round(slider.value * 100) + '%';
         });
     });
+
+    function loadSettings() {
+        const saved = JSON.parse(localStorage.getItem('timingSettings') || '{}');
+        document.getElementById('time-length').value = saved.timeLength || 60;
+        document.getElementById('repeats').value = saved.repeats || 3;
+        document.getElementById('volume-slider').value = saved.volume || 0.8;
+        document.getElementById('volume-value').textContent = Math.round((saved.volume || 0.8) * 100) + '%';
+    }
+
+    function saveSettings() {
+        const settings = {
+            timeLength: parseInt(document.getElementById('time-length').value) || 60,
+            repeats: parseInt(document.getElementById('repeats').value) || 1,
+            volume: parseFloat(document.getElementById('volume-slider').value)
+        };
+        localStorage.setItem('timingSettings', JSON.stringify(settings));
+        
+        const btn = document.getElementById('save-btn');
+        btn.textContent = '✅ 已儲存';
+        btn.style.background = '#22c55e';
+        setTimeout(() => { btn.textContent = '💾 儲存設定'; btn.style.background = '#00d4ff'; }, 1200);
+    }
 </script>
 </body>
 </html>
