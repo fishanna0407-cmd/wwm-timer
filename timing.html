@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timing</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
+        
+        :root { --primary: #00d4ff; }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: #0f172a;
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 460px;
+            margin: 0 auto;
+            background: #1e2937;
+            border-radius: 28px;
+            box-shadow: 0 25px 50px -12px rgba(0, 212, 255, 0.2);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(90deg, #0f172a, #1e2937);
+            padding: 20px;
+            text-align: center;
+        }
+        .logo {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 32px;
+            font-weight: 600;
+            letter-spacing: -2px;
+            background: linear-gradient(90deg, #00d4ff, #a5f3fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .main { padding: 30px 25px; }
+        .timer-display {
+            font-size: 5.8rem;
+            font-weight: 600;
+            font-family: 'Space Grotesk', sans-serif;
+            letter-spacing: -6px;
+            color: #00d4ff;
+            text-align: center;
+            margin-bottom: 10px;
+            text-shadow: 0 0 40px #00d4ff;
+        }
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 30px;
+        }
+        button {
+            flex: 1;
+            padding: 18px;
+            border-radius: 16px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #00d4ff; color: #0f172a; }
+        .btn-secondary { background: #334155; color: white; }
+        .settings {
+            background: #1e2937;
+            padding: 25px;
+            border-radius: 20px;
+            margin-top: 25px;
+        }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; color: #cbd5e1; }
+        input[type="number"], input[type="range"] {
+            width: 100%;
+            padding: 12px 16px;
+            background: #334155;
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 1.1rem;
+        }
+        .footer { text-align: center; padding: 15px; font-size: 0.85rem; color: #64748b; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header"><div class="logo">TIMING</div></div>
+    <div class="main">
+        <div class="timer-display" id="timer-display">00:00</div>
+
+        <div class="controls">
+            <button id="start-btn" class="btn-primary">START TIMER</button>
+            <button id="stop-btn" class="btn-secondary">STOP</button>
+        </div>
+
+        <div class="settings">
+            <h2 style="color:#00d4ff; margin-bottom:20px;">⚙️ 設定</h2>
+            
+            <div class="form-group">
+                <label>倒數秒數 (seconds)</label>
+                <input type="number" id="time-length" value="60" min="5">
+            </div>
+            
+            <div class="form-group">
+                <label>重複次數</label>
+                <input type="number" id="repeats" value="3" min="1">
+            </div>
+            
+            <div class="form-group">
+                <label>音量 <span id="volume-value" style="float:right;">80%</span></label>
+                <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="0.8">
+            </div>
+
+            <button id="save-btn" style="width:100%; background:#00d4ff; color:#0f172a; padding:16px; border-radius:16px; font-size:1.1rem; font-weight:600;">
+                💾 儲存設定
+            </button>
+        </div>
+    </div>
+    <div class="footer">Timing • Hosted Online Version</div>
+</div>
+
+<script>
+    let isRunning = false;
+    let isPaused = false;
+    let timerInterval = null;
+    let endTime = null;
+    let pausedRemaining = null;
+    let totalRepeats = 3;
+    let currentRepeat = 1;
+    let audio = null;
+    
+    // === 重要：線上版本使用相對路徑 ===
+    const alarmFile = "alarm.mp3";
+
+    function loadSettings() {
+        const saved = JSON.parse(localStorage.getItem('timingSettings') || '{}');
+        document.getElementById('time-length').value = saved.timeLength || 60;
+        document.getElementById('repeats').value = saved.repeats || 3;
+        document.getElementById('volume-slider').value = saved.volume || 0.8;
+        document.getElementById('volume-value').textContent = Math.round((saved.volume || 0.8) * 100) + '%';
+    }
+
+    function saveSettings() {
+        const settings = {
+            timeLength: parseInt(document.getElementById('time-length').value) || 60,
+            repeats: parseInt(document.getElementById('repeats').value) || 1,
+            volume: parseFloat(document.getElementById('volume-slider').value)
+        };
+        localStorage.setItem('timingSettings', JSON.stringify(settings));
+        
+        const btn = document.getElementById('save-btn');
+        btn.textContent = '✅ 已儲存';
+        btn.style.background = '#22c55e';
+        setTimeout(() => { btn.textContent = '💾 儲存設定'; btn.style.background = '#00d4ff'; }, 1200);
+    }
+
+    function toggleTimer() {
+        const settings = JSON.parse(localStorage.getItem('timingSettings') || '{}');
+
+        if (isRunning && !isPaused) {
+            clearInterval(timerInterval);
+            isPaused = true;
+            pausedRemaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+            
+            const btn = document.getElementById('start-btn');
+            btn.textContent = 'RESUME';
+            btn.style.background = '#22c55e';
+        } 
+        else if (isPaused) {
+            isPaused = false;
+            endTime = Date.now() + pausedRemaining * 1000;
+            pausedRemaining = null;
+            
+            const btn = document.getElementById('start-btn');
+            btn.textContent = 'PAUSE';
+            btn.style.background = '#eab308';
+            startCountdown();
+        } 
+        else {
+            isRunning = true;
+            isPaused = false;
+            currentRepeat = 1;
+            totalRepeats = settings.repeats || 3;
+            endTime = Date.now() + (settings.timeLength || 60) * 1000;
+            
+            const btn = document.getElementById('start-btn');
+            btn.textContent = 'PAUSE';
+            btn.style.background = '#eab308';
+            startCountdown();
+        }
+    }
+
+    function stopTimer() {
+        clearInterval(timerInterval);
+        isRunning = false;
+        isPaused = false;
+        endTime = null;
+        pausedRemaining = null;
+        
+        const btn = document.getElementById('start-btn');
+        btn.textContent = 'START TIMER';
+        btn.style.background = '#00d4ff';
+        updateDisplay();
+    }
+
+    function startCountdown() {
+        if (timerInterval) clearInterval(timerInterval);
+        
+        timerInterval = setInterval(() => {
+            if (!endTime) return;
+            const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+            
+            const min = Math.floor(remaining / 60);
+            const sec = remaining % 60;
+            document.getElementById('timer-display').textContent = 
+                `${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+
+            if (remaining <= 0) playAlarm();
+        }, 100);
+    }
+
+    function playAlarm() {
+        const settings = JSON.parse(localStorage.getItem('timingSettings') || '{}');
+        audio = new Audio(alarmFile);
+        audio.volume = settings.volume || 0.8;
+        audio.play().catch(() => {});
+
+        if (currentRepeat < totalRepeats) {
+            currentRepeat++;
+            endTime = endTime + (settings.timeLength || 60) * 1000;
+            startCountdown();
+        } else {
+            isRunning = false;
+            isPaused = false;
+            const btn = document.getElementById('start-btn');
+            btn.textContent = 'START TIMER';
+            btn.style.background = '#00d4ff';
+            endTime = null;
+        }
+    }
+
+    function updateDisplay() {
+        const settings = JSON.parse(localStorage.getItem('timingSettings') || '{}');
+        const t = settings.timeLength || 60;
+        const min = Math.floor(t / 60);
+        const sec = t % 60;
+        document.getElementById('timer-display').textContent = 
+            `${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadSettings();
+        updateDisplay();
+
+        document.getElementById('start-btn').addEventListener('click', toggleTimer);
+        document.getElementById('stop-btn').addEventListener('click', stopTimer);
+        document.getElementById('save-btn').addEventListener('click', saveSettings);
+
+        const slider = document.getElementById('volume-slider');
+        slider.addEventListener('input', () => {
+            document.getElementById('volume-value').textContent = Math.round(slider.value * 100) + '%';
+        });
+    });
+</script>
+</body>
+</html>
