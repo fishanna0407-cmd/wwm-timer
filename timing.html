@@ -110,7 +110,7 @@
             </button>
         </div>
     </div>
-    <div class="footer">Timing • Final Audio Fix</div>
+    <div class="footer">Timing • Audio Fixed</div>
 </div>
 
 <script>
@@ -121,41 +121,63 @@
     let pausedRemaining = null;
     let totalRepeats = 3;
     let currentRepeat = 1;
-    let currentAudio = null;
+    
+    let audio = null;                    // Single reusable audio object
     const alarmFile = "alarm.mp3";
 
-    function stopCurrentAudio() {
-        if (currentAudio) {
-            currentAudio.pause();
-            currentAudio.currentTime = 0;
+    function initAudio() {
+        if (!audio) {
+            audio = new Audio(alarmFile);
+            audio.preload = "auto";
         }
     }
 
-    function playAlarm() {
+    function playAlarmSound() {
+        if (!audio) initAudio();
+        
+        // Reset audio to start
+        audio.pause();
+        audio.currentTime = 0;
+        
         const settings = JSON.parse(localStorage.getItem('timingSettings') || '{}');
-        
-        stopCurrentAudio();
-        
-        currentAudio = new Audio(alarmFile);
-        currentAudio.volume = settings.volume || 0.8;
-        currentAudio.loop = false;
-        
-        // Play sound (always play on every cycle end)
-        currentAudio.play().catch(err => console.log("Audio play failed:", err));
+        audio.volume = settings.volume || 0.8;
 
-        // Check if we should continue to next loop
-        if (currentRepeat < totalRepeats) {
-            currentRepeat++;
-            endTime = endTime + (settings.timeLength || 60) * 1000;
-            startCountdown();
-        } else {
-            // This is the LAST loop - finish properly
-            isRunning = false;
-            isPaused = false;
-            document.getElementById('start-btn').textContent = 'START TIMER';
-            document.getElementById('start-btn').style.background = '#00d4ff';
-            endTime = null;
+        // Play with better error handling
+        const playPromise = audio.play();
+        
+        if (playPromise !== undefined) {
+            playPromise.then(() => {
+                console.log("Audio playing successfully");
+            }).catch(error => {
+                console.log("Audio play failed:", error);
+                // Try one more time after short delay (helps on some browsers)
+                setTimeout(() => {
+                    audio.play().catch(e => console.log("Retry failed:", e));
+                }, 200);
+            });
         }
+    }
+
+    function loadSettings() {
+        const saved = JSON.parse(localStorage.getItem('timingSettings') || '{}');
+        document.getElementById('time-length').value = saved.timeLength || 60;
+        document.getElementById('repeats').value = saved.repeats || 3;
+        document.getElementById('volume-slider').value = saved.volume || 0.8;
+        document.getElementById('volume-value').textContent = Math.round((saved.volume || 0.8) * 100) + '%';
+    }
+
+    function saveSettings() {
+        const settings = {
+            timeLength: parseInt(document.getElementById('time-length').value) || 60,
+            repeats: parseInt(document.getElementById('repeats').value) || 1,
+            volume: parseFloat(document.getElementById('volume-slider').value)
+        };
+        localStorage.setItem('timingSettings', JSON.stringify(settings));
+        
+        const btn = document.getElementById('save-btn');
+        btn.textContent = '✅ 已儲存';
+        btn.style.background = '#22c55e';
+        setTimeout(() => { btn.textContent = '💾 儲存設定'; btn.style.background = '#00d4ff'; }, 1200);
     }
 
     function toggleTimer() {
@@ -190,7 +212,10 @@
 
     function stopTimer() {
         clearInterval(timerInterval);
-        stopCurrentAudio();
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
         isRunning = false;
         isPaused = false;
         endTime = null;
@@ -210,10 +235,27 @@
             document.getElementById('timer-display').textContent = `${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
 
             if (remaining <= 0) {
-                clearInterval(timerInterval);   // Clear before playing alarm
-                playAlarm();
+                playAlarmSound();           // Play sound first
+                handleNextCycle();          // Then handle repeat logic
             }
         }, 100);
+    }
+
+    function handleNextCycle() {
+        const settings = JSON.parse(localStorage.getItem('timingSettings') || '{}');
+        
+        if (currentRepeat < totalRepeats) {
+            currentRepeat++;
+            endTime = endTime + (settings.timeLength || 60) * 1000;
+            // Continue countdown automatically
+        } else {
+            // All repeats finished
+            isRunning = false;
+            isPaused = false;
+            document.getElementById('start-btn').textContent = 'START TIMER';
+            document.getElementById('start-btn').style.background = '#00d4ff';
+            endTime = null;
+        }
     }
 
     function updateDisplay() {
@@ -236,6 +278,19 @@
         slider.addEventListener('input', () => {
             document.getElementById('volume-value').textContent = Math.round(slider.value * 100) + '%';
         });
+
+        // Pre-initialize audio on first user interaction (helps iOS)
+        document.body.addEventListener('click', function initAudioOnce() {
+            if (!window.audioInitialized) {
+                const tempAudio = new Audio(alarmFile);
+                tempAudio.volume = 0;
+                tempAudio.play().then(() => {
+                    tempAudio.pause();
+                    window.audioInitialized = true;
+                }).catch(() => {});
+                document.body.removeEventListener('click', initAudioOnce);
+            }
+        }, { once: true });
     });
 
     function loadSettings() {
