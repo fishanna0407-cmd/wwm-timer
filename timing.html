@@ -110,7 +110,7 @@
             </button>
         </div>
     </div>
-    <div class="footer">Timing • Audio Loop Fixed</div>
+    <div class="footer">Timing • Final Audio Fix</div>
 </div>
 
 <script>
@@ -121,7 +121,7 @@
     let pausedRemaining = null;
     let totalRepeats = 3;
     let currentRepeat = 1;
-    let currentAudio = null;        // ← Use single audio instance
+    let currentAudio = null;
     const alarmFile = "alarm.mp3";
 
     function stopCurrentAudio() {
@@ -134,23 +134,22 @@
     function playAlarm() {
         const settings = JSON.parse(localStorage.getItem('timingSettings') || '{}');
         
-        stopCurrentAudio();                     // Stop any previous audio
+        stopCurrentAudio();
         
         currentAudio = new Audio(alarmFile);
         currentAudio.volume = settings.volume || 0.8;
         currentAudio.loop = false;
+        
+        // Play sound (always play on every cycle end)
+        currentAudio.play().catch(err => console.log("Audio play failed:", err));
 
-        currentAudio.play().catch(err => {
-            console.log("Audio play error:", err);
-        });
-
-        // Handle repeat
+        // Check if we should continue to next loop
         if (currentRepeat < totalRepeats) {
             currentRepeat++;
             endTime = endTime + (settings.timeLength || 60) * 1000;
             startCountdown();
         } else {
-            // All repeats finished
+            // This is the LAST loop - finish properly
             isRunning = false;
             isPaused = false;
             document.getElementById('start-btn').textContent = 'START TIMER';
@@ -210,7 +209,10 @@
             const sec = remaining % 60;
             document.getElementById('timer-display').textContent = `${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
 
-            if (remaining <= 0) playAlarm();
+            if (remaining <= 0) {
+                clearInterval(timerInterval);   // Clear before playing alarm
+                playAlarm();
+            }
         }, 100);
     }
 
@@ -222,7 +224,6 @@
         document.getElementById('timer-display').textContent = `${min.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
     }
 
-    // Load & Init
     document.addEventListener('DOMContentLoaded', () => {
         loadSettings();
         updateDisplay();
